@@ -1079,7 +1079,14 @@ export default function Sidebar({
                     title={`Click to start direct chat with @${u.username}`}
                   >
                     <div className="flex items-center gap-3 min-w-0">
-                      <div className="relative shrink-0">
+                      <div 
+                        className="relative shrink-0 transition-transform active:scale-95 duration-100 hover:brightness-110 cursor-pointer"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onViewUserProfile?.(u);
+                        }}
+                        title={`View @${u.username}'s profile card`}
+                      >
                         <div className="w-10 h-10 rounded-full bg-[#1f2c34] flex items-center justify-center text-xl border border-white/5">
                           {u.avatar || '👤'}
                         </div>
