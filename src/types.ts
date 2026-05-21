@@ -73,4 +73,4 @@ export interface AIResponseState {
   chatId?: string;
 }
 
-export const DEV_VERIFIED_USERNAMES = ['Cortex','Frankkaumbadev'];
+export const DEV_VERIFIED_USERNAMES = ['Cortex'];
