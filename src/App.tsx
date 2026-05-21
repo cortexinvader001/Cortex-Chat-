@@ -617,7 +617,7 @@ export default function App() {
 
   if (loadingApp) {
     return (
-      <div className="h-screen w-screen bg-[#0b141a] flex flex-col justify-center items-center gap-4 text-white">
+      <div className="h-screen h-[100dvh] w-screen bg-[#0b141a] flex flex-col justify-center items-center gap-4 text-white">
         <div className="w-10 h-10 border-4 border-[#00a884] border-t-transparent rounded-full animate-spin"></div>
         <div className="text-sm font-medium tracking-wide">Connecting security buffers...</div>
       </div>
@@ -631,7 +631,7 @@ export default function App() {
   const activeChat = chats.find(c => c.id === activeChatId);
 
   return (
-    <div className={`h-screen w-screen flex relative overflow-hidden text-gray-200 ${activeTheme.bgApp} transition-colors duration-300 font-sans`}>
+    <div className={`h-screen h-[100dvh] w-screen flex relative overflow-hidden text-gray-200 ${activeTheme.bgApp} transition-colors duration-300 font-sans`}>
       
       {/* 2-Column WhatsApp Panel Shell */}
       <div className="flex-grow flex overflow-hidden h-full">

@@ -403,7 +403,7 @@ export default function Sidebar({
   });
 
   return (
-    <div className={`w-full md:w-[350px] border-r border-white/5 flex flex-col h-full bg-[#111b21] shrink-0 select-none`}>
+    <div className="w-full h-full border-r border-white/5 flex flex-col bg-[#111b21] shrink-0 select-none">
       
       {/* Sidebar Profile Header */}
       <div className="p-4 bg-[#121b22] flex items-center justify-between border-b border-white/5">
@@ -1043,107 +1043,169 @@ export default function Sidebar({
       )}
 
       {/* DIRECTORY ADD FRIENDS TAB */}
-      {activeTab === 'friends' && (
-        <div className="flex-grow flex flex-col min-h-0">
-          <div className="p-3 bg-[#111b21] border-b border-white/5">
-            <div className="flex items-center gap-2 bg-[#202c33] rounded-xl px-3 py-2 border border-transparent focus-within:border-white/10 transition-colors">
-              <Search className="w-4 h-4 text-gray-400" />
-              <input
-                type="text"
-                placeholder="Search registered contacts..."
-                value={friendSearchQuery}
-                onChange={(e) => setFriendSearchQuery(e.target.value)}
-                className="w-full bg-transparent text-xs text-white placeholder-gray-500 focus:outline-none"
-              />
+      {activeTab === 'friends' && (() => {
+        const myFriendsList = directoryUsers.filter(u => u.id !== currentUser.id && currentUser.friends?.includes(u.id));
+        const otherUsersList = directoryUsers.filter(u => u.id !== currentUser.id && !currentUser.friends?.includes(u.id));
+
+        const query = friendSearchQuery.trim().toLowerCase();
+        const filteredFriends = myFriendsList.filter(u => !query || u.username.toLowerCase().includes(query));
+        const filteredOthers = otherUsersList.filter(u => !query || u.username.toLowerCase().includes(query));
+
+        return (
+          <div className="flex-grow flex flex-col min-h-0">
+            <div className="p-3 bg-[#111b21] border-b border-white/5">
+              <div className="flex items-center gap-2 bg-[#202c33] rounded-xl px-3 py-2 border border-transparent focus-within:border-white/10 transition-colors">
+                <Search className="w-4 h-4 text-gray-400" />
+                <input
+                  type="text"
+                  placeholder="Search friends or contacts..."
+                  value={friendSearchQuery}
+                  onChange={(e) => setFriendSearchQuery(e.target.value)}
+                  className="w-full bg-transparent text-xs text-white placeholder-gray-500 focus:outline-none"
+                />
+              </div>
+            </div>
+
+            <div className="flex-1 overflow-y-auto bg-[#111b21] divide-y divide-white/5">
+              
+              {/* SECTION: MY FRIENDS */}
+              {filteredFriends.length > 0 && (
+                <div>
+                  <div className="p-3 bg-[#121b22]/70 text-[10px] font-bold text-emerald-400 uppercase tracking-widest sticky top-0 z-10 backdrop-blur-sm border-b border-white/5">
+                    My Friends ({filteredFriends.length})
+                  </div>
+                  <div className="divide-y divide-white/5">
+                    {filteredFriends.map((u) => (
+                      <div
+                        key={u.id}
+                        onClick={() => handleStartDirectChat(u.id)}
+                        className="p-3.5 flex items-center justify-between hover:bg-[#202c33]/40 cursor-pointer transition-all select-none group"
+                        title={`Click to open direct chat with @${u.username}`}
+                      >
+                        <div className="flex items-center gap-3 min-w-0">
+                          <div 
+                            className="relative shrink-0 transition-transform active:scale-95 duration-100 hover:brightness-110 cursor-pointer animate-fade-in"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onViewUserProfile?.(u);
+                            }}
+                            title={`View @${u.username}'s profile card`}
+                          >
+                            <div className="w-10 h-10 rounded-full bg-[#1f2c34] flex items-center justify-center text-xl border border-white/5">
+                              {u.avatar || '👤'}
+                            </div>
+                            {usersOnlineMap[u.id] && (
+                              <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-500 border-2 border-[#111b21]"></span>
+                            )}
+                          </div>
+                          <div className="min-w-0">
+                            <div className="font-semibold text-white text-sm flex items-center gap-1">
+                              <span className="truncate">{u.username}</span>
+                              <VerifiedBadge username={u.username} className="w-2.5 h-2.5" />
+                            </div>
+                            <div className="text-xs text-emerald-400 font-medium truncate max-w-[140px]" title={u.bio}>
+                              {u.bio || 'Hey there! I use chat'}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="shrink-0 pl-2">
+                          <span className="text-[9px] font-bold text-[#00a884] uppercase tracking-wider bg-[#00a884]/10 border border-[#00a884]/10 px-2 py-1 rounded-full">
+                            Chat 💬
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* SECTION: GLOBAL platform DIRECTORY / ADD NEW FRIENDS */}
+              <div>
+                <div className="p-3 bg-[#121b22]/70 text-[10px] font-bold text-gray-400 uppercase tracking-widest sticky top-0 z-10 backdrop-blur-sm border-b border-white/5">
+                  Find & Add Friends ({filteredOthers.length})
+                </div>
+                {filteredOthers.length === 0 ? (
+                  <div className="p-8 text-center text-xs text-gray-500">
+                    No other users available.
+                  </div>
+                ) : (
+                  <div className="divide-y divide-white/5">
+                    {filteredOthers.map((u) => {
+                      const isPending = pendingRequestsSent.includes(u.id);
+                      const hasSentToMe = pendingRequests.some(r => r.fromId === u.id);
+
+                      return (
+                        <div
+                          key={u.id}
+                          onClick={() => onViewUserProfile?.(u)}
+                          className="p-3.5 flex items-center justify-between hover:bg-[#202c33]/40 cursor-pointer transition-all select-none group"
+                          title={`Click to view @${u.username}'s complete profile card`}
+                        >
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className="relative shrink-0">
+                              <div className="w-10 h-10 rounded-full bg-[#1f2c34] flex items-center justify-center text-xl border border-white/5">
+                                {u.avatar || '👤'}
+                              </div>
+                              {usersOnlineMap[u.id] && (
+                                <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-500 border-2 border-[#111b21]"></span>
+                              )}
+                            </div>
+                            <div className="min-w-0">
+                              <div className="font-semibold text-white text-sm flex items-center gap-1">
+                                <span className="truncate">{u.username}</span>
+                                <VerifiedBadge username={u.username} className="w-2.5 h-2.5" />
+                              </div>
+                              <div className="text-xs text-gray-400 truncate max-w-[140px]" title={u.bio}>
+                                {u.bio || 'Hey there! I use chat'}
+                              </div>
+                            </div>
+                          </div>
+
+                          <div className="shrink-0 pl-2">
+                            {hasSentToMe ? (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleAcceptRequest(u.id);
+                                }}
+                                className="text-[10px] font-bold text-white bg-emerald-600 hover:bg-emerald-500 py-1.5 px-3 rounded-xl transition-all cursor-pointer active:scale-95 shadow-md"
+                              >
+                                Accept
+                              </button>
+                            ) : isPending ? (
+                              <span className="text-[10px] text-gray-400 font-semibold bg-white/5 py-1 px-2.5 rounded-full border border-white/5 inline-flex items-center gap-1">
+                                Sent ⏳
+                              </span>
+                            ) : (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleSendRequest(u.username, u.id);
+                                }}
+                                className="text-[10px] font-bold text-white bg-[#00a884] hover:opacity-90 transition-all py-1.5 px-3 rounded-xl uppercase tracking-wider active:scale-95 cursor-pointer shadow-md"
+                              >
+                                Add
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {filteredFriends.length === 0 && filteredOthers.length === 0 && (
+                <div className="p-10 text-center text-xs text-gray-500">
+                  No directory records found.
+                </div>
+              )}
+
             </div>
           </div>
-
-          {/* Directory Users Render */}
-          <div className="flex-1 overflow-y-auto divide-y divide-white/5 bg-[#111b21]">
-            {filteredUsers.length === 0 ? (
-              <div className="p-10 text-center text-xs text-gray-500">
-                No users matched your parameters.
-              </div>
-            ) : (
-              // Filter out current user from the add friends directory list
-              filteredUsers.filter(u => u.id !== currentUser.id).map((u) => {
-                const isFriend = currentUser.friends?.includes(u.id);
-                const isPending = pendingRequestsSent.includes(u.id);
-                const hasSentToMe = pendingRequests.some(r => r.fromId === u.id);
-
-                return (
-                  <div
-                    key={u.id}
-                    onClick={() => handleStartDirectChat(u.id)}
-                    className="p-3.5 flex items-center justify-between hover:bg-[#202c33]/40 cursor-pointer active:scale-[0.99] transition-all select-none group"
-                    title={`Click to start direct chat with @${u.username}`}
-                  >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div 
-                        className="relative shrink-0 transition-transform active:scale-95 duration-100 hover:brightness-110 cursor-pointer"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onViewUserProfile?.(u);
-                        }}
-                        title={`View @${u.username}'s profile card`}
-                      >
-                        <div className="w-10 h-10 rounded-full bg-[#1f2c34] flex items-center justify-center text-xl border border-white/5">
-                          {u.avatar || '👤'}
-                        </div>
-                        {usersOnlineMap[u.id] && (
-                          <span className="absolute bottom-0 right-0 w-2.5 h-2.5 rounded-full bg-emerald-500 border-2 border-[#111b21]"></span>
-                        )}
-                      </div>
-                      <div className="min-w-0">
-                        <div className="font-semibold text-white text-sm flex items-center gap-1">
-                          <span className="truncate">{u.username}</span>
-                          <VerifiedBadge username={u.username} className="w-2.5 h-2.5" />
-                        </div>
-                        {/* 20-character limit bio in style */}
-                        <div className="text-xs text-[#00a884] font-medium truncate max-w-[140px]" title={u.bio}>
-                          {u.bio || 'Hey there! I use chat'}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="shrink-0 pl-2">
-                      {isFriend ? (
-                        <span className="text-[10px] text-emerald-400 font-bold bg-[#00a884]/10 border border-[#00a884]/20 py-1 px-2.5 rounded-full uppercase tracking-wider">
-                          Friends ✅
-                        </span>
-                      ) : hasSentToMe ? (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleAcceptRequest(u.id);
-                          }}
-                          className="text-[10px] font-bold text-white bg-emerald-600 hover:bg-emerald-500 py-1 px-2 rounded-lg cursor-pointer"
-                        >
-                          Accept
-                        </button>
-                      ) : isPending ? (
-                        <span className="text-[10px] text-gray-400 font-semibold bg-white/5 py-1 px-2.5 rounded-full border border-white/5 inline-flex items-center gap-1">
-                          Sent ⏳
-                        </span>
-                      ) : (
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleSendRequest(u.username, u.id);
-                          }}
-                          className="text-[10px] font-bold text-white bg-[#00a884] hover:opacity-90 transition-all py-1.5 px-3 rounded-xl uppercase tracking-wider active:scale-95 cursor-pointer"
-                        >
-                          Add
-                        </button>
-                      )}
-                    </div>
-                  </div>
-                );
-              })
-            )}
-          </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* DEV BOARD SYSTEM STATS AND ADMIN PANEL */}
       {activeTab === 'dev_dashboard' && (

@@ -58,8 +58,8 @@ export default function AuthScreen({ onAuthSuccess }: AuthScreenProps) {
   const activeTheme = THEMES[selectedTheme];
 
   return (
-    <div className="h-full w-full flex flex-col justify-start sm:justify-center items-center py-8 px-4 bg-[#0b141a] overflow-y-auto">
-      <div className={`w-full max-w-md bg-[#111b21] rounded-2xl border border-white/5 p-8 shadow-2xl transition-all duration-300 ${activeTheme.glowClass}`}>
+    <div className="absolute inset-0 flex flex-col justify-start sm:justify-center items-center py-10 px-4 bg-[#0b141a] overflow-y-auto select-none">
+      <div className={`w-full max-w-md bg-[#111b21] rounded-2xl border border-white/5 p-8 my-auto shadow-2xl transition-all duration-300 ${activeTheme.glowClass}`}>
         
         {/* Brand Header */}
         <div className="flex flex-col items-center text-center mb-8">
