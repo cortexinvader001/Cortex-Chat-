@@ -1,0 +1,8 @@
+{
+  "name": "Remix: FlashChat AI",
+  "description": "A lightweight PWA featuring real-time messaging, AI assistance, and ephemeral chats that automatically delete after 48 hours.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

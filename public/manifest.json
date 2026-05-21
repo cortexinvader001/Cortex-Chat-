@@ -1,0 +1,21 @@
+{
+  "short_name": "Cortex Chat",
+  "name": "Cortex Chat App PWA",
+  "icons": [
+    {
+      "src": "https://img.icons8.com/color/192/000000/chat--v1.png",
+      "type": "image/png",
+      "sizes": "192x192"
+    },
+    {
+      "src": "https://img.icons8.com/color/512/000000/chat--v1.png",
+      "type": "image/png",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#121b22",
+  "theme_color": "#00a884",
+  "display": "standalone",
+  "orientation": "portrait"
+}
