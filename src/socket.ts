@@ -1,7 +1,7 @@
 import { io, Socket } from 'socket.io-client';
 
-//const API_URL = (import.meta as any).env?.VITE_API_URL || '';
-const API_URL = 'https://cortex-chat-a293.onrender.com'
+const API_URL = (import.meta as any).env?.VITE_API_URL || '';
+//const API_URL = 'https://cortex-chat-a293.onrender.com'
 
 // Simple client-side socket singleton initialization
 // Support cross-origin socket connection if VITE_API_URL is configured
