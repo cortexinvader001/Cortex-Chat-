@@ -450,7 +450,7 @@ export default function ChatArea({
       )}
 
       {/* Primary Message Log Feed */}
-      <div className={`flex-grow overflow-y-auto p-4 md:p-6 space-y-4 select-text ${selectedWallpaperStyle} relative`}>
+      <div className={`flex-grow overflow-y-auto px-3.5 py-4 md:p-5 space-y-2.5 select-text ${selectedWallpaperStyle} relative`}>
         
         {/* Ephemeral warning info badge banner */}
         <div className="flex justify-center select-none py-1">
@@ -502,10 +502,10 @@ export default function ChatArea({
                 )}
 
                 <div
-                  className={`max-w-[85%] md:max-w-[70%] rounded-2xl p-3 relative transition-all duration-300 group/msg flex flex-col gap-2 ${
+                  className={`max-w-[88%] md:max-w-[75%] rounded-2xl py-2 px-3 relative transition-all duration-300 group/msg flex flex-col gap-1 ${
                     isSticker
                       ? 'bg-transparent border-transparent shadow-none p-0'
-                      : (isMe ? 'text-white border border-white/5 shadow-md' : 'bg-[#202c33] text-gray-100 border border-white/5 shadow-md')
+                      : (isMe ? 'text-white border border-white/5 shadow border-b border-b-black/10' : 'bg-[#202c33] text-gray-100 border border-white/5 shadow border-b border-b-black/20')
                   }`}
                   style={{
                     backgroundColor: (!isSticker && isMe) ? activeTheme.accentHex : undefined,

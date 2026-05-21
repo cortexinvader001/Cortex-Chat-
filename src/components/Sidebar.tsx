@@ -171,7 +171,7 @@ export default function Sidebar({
         },
         body: JSON.stringify({
           isGroup: false,
-          partnerId: status.userId
+          members: [status.userId]
         })
       });
       if (chatResp.ok) {
