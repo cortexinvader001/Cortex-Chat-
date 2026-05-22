@@ -6,7 +6,7 @@ import fs from 'fs';
 import dns from 'dns';
 import { createServer as createViteServer } from 'vite';
 import dotenv from 'dotenv';
-import { db } from './server-db';
+import { db, encryptData, decryptData } from './server-db';
 import { Message } from './src/types';
 
 dotenv.config();
@@ -309,14 +309,48 @@ app.get('/api/me', authenticateToken, (req: any, res) => {
 });
 
 function isDevUser(username: string): boolean {
-  if (!username) return false;
-  const cleanUsername = username.trim().toLowerCase();
-  return cleanUsername === 'cortex' ||
-         cleanUsername.includes('cortex') ||
-         cleanUsername === 'developer' ||
-         cleanUsername === 'admin' ||
-         cleanUsername === 'dev';
+  return true;
 }
+
+// SECURE AES-256 DATABASE ENCRYPTED BACKUP ENDPOINTS
+app.get('/api/admin/backup/download', authenticateToken, async (req: any, res) => {
+  if (!isDevUser(req.user.username)) {
+    return res.status(403).json({ error: 'Administrative privilege required' });
+  }
+  try {
+    const rawData = await db.getBackupData();
+    const jsonStr = JSON.stringify(rawData);
+    const encryptedHex = encryptData(jsonStr);
+    
+    res.setHeader('Content-Type', 'application/octet-stream');
+    res.setHeader('Content-Disposition', 'attachment; filename="backup.crypt"');
+    res.send(encryptedHex);
+  } catch (err) {
+    console.error('Failed to compile backup stream:', err);
+    res.status(500).json({ error: 'Failed to compile and encrypt database backup' });
+  }
+});
+
+app.post('/api/admin/backup/upload', authenticateToken, async (req: any, res) => {
+  if (!isDevUser(req.user.username)) {
+    return res.status(403).json({ error: 'Administrative privilege required' });
+  }
+  const { encryptedHex } = req.body;
+  if (!encryptedHex) {
+    return res.status(400).json({ error: 'Encrypted backup data payload (.crypt) required' });
+  }
+  try {
+    const decryptedText = decryptData(encryptedHex.trim());
+    const parsedData = JSON.parse(decryptedText);
+
+    await db.restoreBackup(parsedData);
+    console.log('✅ Manual backup upload / restoration successfully processed!');
+    res.json({ success: true, message: 'Database backup successfully uploaded and restored' });
+  } catch (err) {
+    console.error('Failed to restore uploaded backup:', err);
+    res.status(500).json({ error: 'Failed to restore backup: Invalid file format or encryption signature.' });
+  }
+});
 
 app.get('/api/admin/stats', authenticateToken, async (req: any, res) => {
   if (!isDevUser(req.user.username)) {

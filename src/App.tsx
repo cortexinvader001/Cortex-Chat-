@@ -25,11 +25,13 @@ const playNotifySound = () => {
     gain.connect(audioContext.destination);
     
     osc.type = 'sine';
-    // Friendly high-tone WhatsApp chord sequence
-    osc.frequency.setValueAtTime(659.25, audioContext.currentTime); // E5
-    gain.gain.setValueAtTime(0.08, audioContext.currentTime);
+    // Highly vivid dual-harmonic high ping (Bright and Loud)
+    osc.frequency.setValueAtTime(880.00, audioContext.currentTime); // A5
+    osc.frequency.setValueAtTime(1046.50, audioContext.currentTime + 0.08); // C6 high double chime
+    gain.gain.setValueAtTime(0.40, audioContext.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.01, audioContext.currentTime + 0.24);
     osc.start();
-    osc.stop(audioContext.currentTime + 0.12);
+    osc.stop(audioContext.currentTime + 0.25);
   } catch (err) {
     console.warn("Audio Synthesizer alert blocked / unavailable", err);
   }
@@ -93,6 +95,24 @@ export default function App() {
   // Real-time states
   const [onlineUsers, setOnlineUsers] = useState<Record<string, boolean>>({});
   const [activeAiGeneratingChats, setActiveAiGeneratingChats] = useState<Record<string, boolean>>({});
+  const [unreadChatIds, setUnreadChatIds] = useState<string[]>(() => {
+    try {
+      const cached = localStorage.getItem('cortex_unread_chat_ids');
+      return cached ? JSON.parse(cached) : [];
+    } catch {
+      return [];
+    }
+  });
+
+  useEffect(() => {
+    localStorage.setItem('cortex_unread_chat_ids', JSON.stringify(unreadChatIds));
+  }, [unreadChatIds]);
+
+  useEffect(() => {
+    if (activeChatId) {
+      setUnreadChatIds(prev => prev.filter(id => id !== activeChatId));
+    }
+  }, [activeChatId]);
 
   // UI Drawer modals toggles
   const [newChatOpen, setNewChatOpen] = useState(false);
@@ -330,6 +350,10 @@ export default function App() {
         const isNotActiveChat = activeChatId !== targetChatId;
         const isHidden = document.visibilityState === 'hidden';
 
+        if (isNotActiveChat) {
+          setUnreadChatIds(prev => prev.includes(targetChatId) ? prev : [...prev, targetChatId]);
+        }
+
         if (isNotActiveChat || isHidden) {
           const alertBody = message.text || (message.mediaType === 'image' ? '📎 Sent a photo' : '📎 Sent a video clip');
           
@@ -451,13 +475,6 @@ export default function App() {
       });
     });
 
-    socket.on('status_created', ({ status }: { status: UserStatus }) => {
-      setStatuses(prev => {
-        if (prev.some(s => s.id === status.id)) return prev;
-        return [status, ...prev];
-      });
-    });
-
     socket.on('status_deleted', ({ statusId }: { statusId: string }) => {
       setStatuses(prev => prev.filter(s => s.id !== statusId));
     });
@@ -484,7 +501,7 @@ export default function App() {
       socket.off('profile_updated');
       socket.off('friend_requests_updated');
     };
-  }, [currentUser]);
+  }, [currentUser, activeChatId]);
 
   // Handle Authentication Success
   const handleAuthSuccess = (token: string, user: any) => {
@@ -652,7 +669,10 @@ export default function App() {
             onThemeChange={handleThemeChange}
             onLogout={handleLogout}
             statuses={statuses}
-            onAddStatus={(newStatus) => setStatuses((prev) => [newStatus, ...prev])}
+            onAddStatus={(newStatus) => setStatuses((prev) => {
+              if (prev.some(s => s.id === newStatus.id)) return prev;
+              return [newStatus, ...prev];
+            })}
             onDeleteStatus={async (statusId: string) => {
               try {
                 const response = await fetch(`/api/statuses/${statusId}`, {
@@ -668,6 +688,7 @@ export default function App() {
             }}
             onViewUserProfile={setViewedProfileUser}
             onRefreshProfile={refreshUserProfile}
+            unreadChatIds={unreadChatIds}
           />
         </div>
 
@@ -737,12 +758,13 @@ export default function App() {
           <Sparkles
             className="w-6 h-6 animate-pulse"
             style={{
-              style: 'none',
               color: currentTheme === 'dark-white' ? '#111b21' : '#ffffff',
             }}
           />
         </button>
       )}
+
+
 
       {/* Compose New Chat Dialog overlay */}
       {newChatOpen && (

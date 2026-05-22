@@ -109,6 +109,9 @@ export default function ChatArea({
   
   const bottomRef = useRef<HTMLDivElement>(null);
   const audioIntervalRef = useRef<any>(null);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
+  const audioRecordingSecondsRef = useRef<number>(0);
 
   // Auto-scroll logic upon message feed or thread change
   useEffect(() => {
@@ -119,8 +122,13 @@ export default function ChatArea({
   useEffect(() => {
     if (isRecordingAudio) {
       setAudioRecordingSeconds(0);
+      audioRecordingSecondsRef.current = 0;
       audioIntervalRef.current = setInterval(() => {
-        setAudioRecordingSeconds((prev) => prev + 1);
+        setAudioRecordingSeconds((prev) => {
+          const next = prev + 1;
+          audioRecordingSecondsRef.current = next;
+          return next;
+        });
       }, 1000);
     } else {
       if (audioIntervalRef.current) {
@@ -265,13 +273,82 @@ export default function ChatArea({
   };
 
   // Recording triggers simulation
-  const handleToggleRecording = () => {
+  const handleToggleRecording = async () => {
     if (isRecordingAudio) {
-      // Send simulated recording clip
-      onSendMessage(`🎤 Voice Note (${audioRecordingSeconds}s of secure real-time clip)`);
-      setIsRecordingAudio(false);
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+        mediaRecorderRef.current.stop();
+      }
     } else {
-      setIsRecordingAudio(true);
+      try {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+          alert("Microphone recording is not supported in this browser run.");
+          return;
+        }
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        audioChunksRef.current = [];
+        
+        let mediaRecorder: MediaRecorder;
+        try {
+          mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
+        } catch {
+          mediaRecorder = new MediaRecorder(stream);
+        }
+
+        mediaRecorder.ondataavailable = (event) => {
+          if (event.data && event.data.size > 0) {
+            audioChunksRef.current.push(event.data);
+          }
+        };
+
+        mediaRecorder.onstop = async () => {
+          stream.getTracks().forEach((track) => track.stop());
+          const audioBlob = new Blob(audioChunksRef.current, { type: mediaRecorder.mimeType || 'audio/webm' });
+          if (audioBlob.size === 0) {
+            setIsRecordingAudio(false);
+            return;
+          }
+
+          const reader = new FileReader();
+          reader.readAsDataURL(audioBlob);
+          reader.onloadend = async () => {
+            const base64data = reader.result as string;
+            const base64Content = base64data.split(',')[1];
+
+            try {
+              const res = await fetch('/api/upload', {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  Authorization: `Bearer ${token}`
+                },
+                body: JSON.stringify({
+                  filename: `voice-note-${Date.now()}.webm`,
+                  filetype: mediaRecorder.mimeType || 'audio/webm',
+                  base64: base64Content
+                })
+              });
+
+              if (res.ok) {
+                const data = await res.json();
+                onSendMessage(`🎤 Voice Note (${audioRecordingSecondsRef.current}s)`, data.url, 'video');
+              } else {
+                console.error("Failed uploading voice note audio file");
+              }
+            } catch (err) {
+              console.error("Network error uploading voice recording:", err);
+            }
+          };
+
+          setIsRecordingAudio(false);
+        };
+
+        mediaRecorderRef.current = mediaRecorder;
+        mediaRecorder.start();
+        setIsRecordingAudio(true);
+      } catch (err) {
+        console.error("Microphone access denied or error:", err);
+        alert("Unable to access microphone. Please confirm frame/browser permissions are granted.");
+      }
     }
   };
 
@@ -568,7 +645,19 @@ export default function ChatArea({
                   {/* Media container display support */}
                   {message.mediaUrl && (
                     <div className="rounded-xl overflow-hidden bg-black/20 border border-white/5 max-h-[250px] overflow-hidden">
-                      {message.mediaType === 'video' ? (
+                      {message.mediaUrl.endsWith('.webm') || message.mediaUrl.endsWith('.wav') || message.mediaUrl.endsWith('.mp3') || message.mediaUrl.endsWith('.ogg') || message.text.includes('Voice Note') ? (
+                        <div className="p-3 bg-black/35 rounded-xl flex flex-col gap-2 min-w-[240px]">
+                          <div className="flex items-center gap-2 text-[10px] text-emerald-400 font-bold font-mono">
+                            <span>🎙️ SECURE REAL-TIME VOICE NOTE</span>
+                          </div>
+                          <audio 
+                            src={message.mediaUrl} 
+                            controls 
+                            className="w-full h-10 filter invert bg-transparent outline-none"
+                            referrerPolicy="no-referrer"
+                          />
+                        </div>
+                      ) : message.mediaType === 'video' ? (
                         <video 
                           src={message.mediaUrl} 
                           controls 
@@ -745,7 +834,7 @@ export default function ChatArea({
           </div>
         )}
 
-        <form onSubmit={handleSend} className="flex items-center gap-3">
+        <div className="flex items-center gap-1.5 sm:gap-3">
           
           {/* Quick trigger button for attachment sandbox list */}
           <button
@@ -755,24 +844,24 @@ export default function ChatArea({
               setShowWallpaperMenu(false);
             }}
             title="Attach stock graphics / videos"
-            className={`p-2.5 rounded-xl transition-colors shrink-0 ${
+            className={`p-1.5 sm:p-2.5 rounded-xl transition-colors shrink-0 ${
               showAttachmentMenu ? 'bg-white/10 text-white' : 'text-gray-400 hover:text-white hover:bg-white/5'
             }`}
           >
-            <Paperclip className="w-4.5 h-4.5" />
+            <Paperclip className="w-4 sm:w-4.5 h-4 sm:h-4.5" />
           </button>
 
           {/* Quick emoji popover buttons list */}
-          <div className="relative">
+          <div className="relative shrink-0">
             <button
               type="button"
               onClick={() => setShowEmojiPicker(!showEmojiPicker)}
               title="Select quick reaction emojis"
-              className={`p-2.5 rounded-xl transition-colors shrink-0 ${
+              className={`p-1.5 sm:p-2.5 rounded-xl transition-colors shrink-0 ${
                 showEmojiPicker ? 'bg-white/10 text-white' : 'text-gray-400 hover:text-white hover:bg-white/5'
               }`}
             >
-              <Smile className="w-4.5 h-4.5" />
+              <Smile className="w-4 sm:w-4.5 h-4 sm:h-4.5" />
             </button>
 
             {showEmojiPicker && (
@@ -803,8 +892,8 @@ export default function ChatArea({
           </div>
 
           {/* Chat input box */}
-          <input
-            type="text"
+          <textarea
+            rows={1}
             placeholder={
               isRecordingAudio 
                 ? "🎙️ Currently transmitting simulated voice note clip..." 
@@ -820,7 +909,12 @@ export default function ChatArea({
                 setTimeout(() => setTypingState(false), 2000);
               }
             }}
-            className="flex-grow bg-[#202c33] text-sm text-white focus:outline-none placeholder-gray-500 border border-white/5 rounded-xl px-4 py-3 focus:border-gray-500 transition-colors"
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                e.stopPropagation();
+              }
+            }}
+            className="flex-grow bg-[#202c33] text-sm text-white focus:outline-none placeholder-gray-500 border border-white/5 rounded-xl px-2.5 sm:px-4 py-2 sm:py-2.5 focus:border-gray-500 transition-colors min-w-0 resize-none max-h-24 h-[44px] overflow-y-auto leading-normal"
           />
 
           {/* Voice recording simulations */}
@@ -828,7 +922,7 @@ export default function ChatArea({
             type="button"
             onClick={handleToggleRecording}
             title={isRecordingAudio ? "Stop and broadcast voice clip" : "Record secure voice message"}
-            className={`p-2.5 rounded-xl transition-all shrink-0 ${
+            className={`p-1.5 sm:p-2.5 rounded-xl transition-all shrink-0 ${
               isRecordingAudio 
                 ? 'bg-red-600 text-white animate-pulse' 
                 : 'text-gray-400 hover:text-white hover:bg-white/5'
@@ -836,31 +930,28 @@ export default function ChatArea({
           >
             {isRecordingAudio ? (
               <span className="flex items-center gap-1">
-                <MicOff className="w-4.5 h-4.5" />
-                <span className="text-[10px] font-bold">{audioRecordingSeconds}s</span>
+                <MicOff className="w-4 sm:w-4.5 h-4 sm:h-4.5" />
+                <span className="text-[9px] sm:text-[10px] font-bold">{audioRecordingSeconds}s</span>
               </span>
             ) : (
-              <Mic className="w-4.5 h-4.5" />
+              <Mic className="w-4 sm:w-4.5 h-4 sm:h-4.5" />
             )}
           </button>
 
           {/* Message dispatch CTA */}
           <button
-            type="submit"
-            disabled={!inputText.trim()}
-            className={`p-3 rounded-xl transition-all font-semibold shrink-0 cursor-pointer ${
-              !inputText.trim() 
-                ? 'bg-[#182229] text-gray-500 cursor-not-allowed' 
-                : 'hover:opacity-90 hover:scale-[1.03]'
-            }`}
+            type="button"
+            onClick={() => handleSend()}
+            title="Send Message"
+            className="w-11 h-11 min-w-[44px] rounded-xl transition-all font-semibold shrink-0 cursor-pointer flex items-center justify-center p-0 relative hover:opacity-95 hover:scale-[1.03]"
             style={{ 
-              backgroundColor: inputText.trim() ? activeTheme.accentHex : undefined,
-              color: inputText.trim() && currentTheme === 'dark-white' ? '#111b21' : '#ffffff' 
+              backgroundColor: activeTheme.accentHex,
+              color: currentTheme === 'dark-white' ? '#111b21' : '#ffffff' 
             }}
           >
-            <Send className="w-4 h-4" />
+            <Send className="w-4.5 h-4.5" />
           </button>
-        </form>
+        </div>
 
         {/* Tip status trigger note */}
         <div className="text-[10px] text-gray-500 flex items-center justify-between px-1">

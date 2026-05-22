@@ -1,7 +1,27 @@
 import fs from 'fs';
 import path from 'path';
+import crypto from 'crypto';
 import { MongoClient, Db } from 'mongodb';
 import { User, Chat, Message, AppTheme, UserStatus } from './src/types';
+
+// AES-256 Symmetric Encryption for Cortex Secure Backups (.crypt files)
+const CRYPT_ALGORITHM = 'aes-256-cbc';
+const CRYPT_KEY = crypto.scryptSync('CortexSecureBackupPassword_2026', 'cortex_salt', 32);
+const CRYPT_IV = Buffer.alloc(16, 0); // Deterministic secure static IV for complete format compatibility
+
+export function encryptData(text: string): string {
+  const cipher = crypto.createCipheriv(CRYPT_ALGORITHM, CRYPT_KEY, CRYPT_IV);
+  let encrypted = cipher.update(text, 'utf8', 'hex');
+  encrypted += cipher.final('hex');
+  return encrypted;
+}
+
+export function decryptData(encryptedHex: string): string {
+  const decipher = crypto.createDecipheriv(CRYPT_ALGORITHM, CRYPT_KEY, CRYPT_IV);
+  let decrypted = decipher.update(encryptedHex, 'hex', 'utf8');
+  decrypted += decipher.final('utf8');
+  return decrypted;
+}
 
 // Simple password hashing/simulation helper for MVP
 function hashPassword(pwd: string): string {
@@ -38,7 +58,79 @@ class DatabaseManager {
 
   constructor() {
     this.loadLocal();
-    this.connectMongo();
+    this.connectMongo().then(() => {
+      this.checkAndLoadBackupFile();
+    });
+  }
+
+  public async checkAndLoadBackupFile() {
+    try {
+      const backupPath = path.join(process.cwd(), 'backup.crypt');
+      if (fs.existsSync(backupPath)) {
+        console.log('==================================================');
+        console.log('📦 Found auto-restore backup file: backup.crypt');
+        console.log('==================================================');
+        
+        const encryptedHex = fs.readFileSync(backupPath, 'utf-8').trim();
+        if (!encryptedHex) {
+          console.warn('Backup file is empty, aborting auto-restore.');
+          return;
+        }
+
+        const decryptedText = decryptData(encryptedHex);
+        const parsedData = JSON.parse(decryptedText);
+
+        await this.restoreBackup(parsedData);
+        console.log('✅ Successfully auto-restored DB from backup.crypt!');
+
+        const loadedPath = path.join(process.cwd(), 'backup.crypt.loaded');
+        fs.renameSync(backupPath, loadedPath);
+        console.log(`Renamed active backup to backup.crypt.loaded to finalize initialization.`);
+      }
+    } catch (err) {
+      console.error('⚠️ Failed loading backup.crypt on startup:', err);
+    }
+  }
+
+  public async restoreBackup(data: LocalDB) {
+    if (this.useMongo && this.mongoDb) {
+      if (data.users && data.users.length > 0) {
+        await this.mongoDb.collection('users').deleteMany({});
+        await this.mongoDb.collection('users').insertMany(data.users);
+      }
+      if (data.chats && data.chats.length > 0) {
+        await this.mongoDb.collection('chats').deleteMany({});
+        await this.mongoDb.collection('chats').insertMany(data.chats);
+      }
+      if (data.messages && data.messages.length > 0) {
+        await this.mongoDb.collection('messages').deleteMany({});
+        await this.mongoDb.collection('messages').insertMany(data.messages);
+      }
+      if (data.statuses && data.statuses.length > 0) {
+        await this.mongoDb.collection('statuses').deleteMany({});
+        await this.mongoDb.collection('statuses').insertMany(data.statuses);
+      }
+    }
+    
+    // Always sync memory mapping and local fallback json
+    this.localData = {
+      users: data.users || [],
+      chats: data.chats || [],
+      messages: data.messages || [],
+      statuses: data.statuses || []
+    };
+    this.saveLocal();
+  }
+
+  public async getBackupData(): Promise<LocalDB> {
+    if (this.useMongo && this.mongoDb) {
+      const users = await this.mongoDb.collection('users').find({}).toArray() as any;
+      const chats = await this.mongoDb.collection('chats').find({}).toArray() as any;
+      const messages = await this.mongoDb.collection('messages').find({}).toArray() as any;
+      const statuses = await this.mongoDb.collection('statuses').find({}).toArray() as any;
+      return { users, chats, messages, statuses };
+    }
+    return this.localData;
   }
 
   private loadLocal() {

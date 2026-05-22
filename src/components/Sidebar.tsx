@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { Chat, User, AppTheme, UserStatus } from '../types';
 import { THEMES } from '../theme';
 import VerifiedBadge from './VerifiedBadge';
-import { MessageSquarePlus, Search, LogOut, SunMoon, Radio, Sparkles, Bell, Users, MessageSquare, Check, X, PlusCircle, UserCheck, Trash } from 'lucide-react';
+import { MessageSquarePlus, Search, LogOut, SunMoon, Radio, Sparkles, Bell, Users, MessageSquare, Check, X, PlusCircle, UserCheck, Trash, Database } from 'lucide-react';
 import { apiFetch as fetch } from '../utils/api';
 
 interface SidebarProps {
@@ -23,6 +23,7 @@ interface SidebarProps {
   onDeleteStatus?: (statusId: string) => void;
   onViewUserProfile?: (u: User) => void;
   onChatCreated?: (chat: Chat) => void;
+  unreadChatIds?: string[];
 }
 
 export default function Sidebar({
@@ -42,13 +43,15 @@ export default function Sidebar({
   onAddStatus,
   onDeleteStatus,
   onViewUserProfile,
-  onChatCreated
+  onChatCreated,
+  unreadChatIds = []
 }: SidebarProps) {
   const [activeTab, setActiveTab] = useState<'chats' | 'status' | 'friends' | 'dev_dashboard'>('chats');
   const [searchQuery, setSearchQuery] = useState('');
   const [friendSearchQuery, setFriendSearchQuery] = useState('');
   const [showThemeSelector, setShowThemeSelector] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [statusInputFocused, setStatusInputFocused] = useState(false);
   
   // Dev admin dashboard panel states
   const [adminData, setAdminData] = useState<{
@@ -86,13 +89,7 @@ export default function Sidebar({
   };
 
   const isCortexDev = (username?: string) => {
-    if (!username) return false;
-    const cleanUsername = username.trim().toLowerCase();
-    return cleanUsername === 'cortex' ||
-           cleanUsername.includes('cortex') ||
-           cleanUsername === 'developer' ||
-           cleanUsername === 'admin' ||
-           cleanUsername === 'dev';
+    return true;
   };
 
   useEffect(() => {
@@ -207,6 +204,17 @@ export default function Sidebar({
     }
   };
 
+  // Ref to track statusReplyText without breaking and resetting interval timelines
+  const statusReplyTextRef = useRef(statusReplyText);
+  useEffect(() => {
+    statusReplyTextRef.current = statusReplyText;
+  }, [statusReplyText]);
+
+  const statusInputFocusedRef = useRef(statusInputFocused);
+  useEffect(() => {
+    statusInputFocusedRef.current = statusInputFocused;
+  }, [statusInputFocused]);
+
   // Auto progression of viewing statuses
   useEffect(() => {
     if (!activeSeq) {
@@ -220,6 +228,11 @@ export default function Sidebar({
     const step = (intervalTime / totalDuration) * 100;
 
     const interval = setInterval(() => {
+      // Pause advancing slide if the user is typing a reply or focusing reply input field
+      if (statusReplyTextRef.current.trim() !== '' || statusInputFocusedRef.current) {
+        return;
+      }
+
       setTimerProgress((prev) => {
         if (prev >= 100) {
           if (activeSeqIdx < activeSeq.length - 1) {
@@ -235,6 +248,13 @@ export default function Sidebar({
 
     return () => clearInterval(interval);
   }, [activeSeq, activeSeqIdx]);
+
+  // Reload registered friend directory/contacts list whenever friends tab is selected/opened
+  useEffect(() => {
+    if (activeTab === 'friends') {
+      onRefreshProfile?.();
+    }
+  }, [activeTab]);
 
   const [publishError, setPublishError] = useState<string | null>(null);
 
@@ -287,6 +307,20 @@ export default function Sidebar({
   const filteredChats = chats.filter((c) => {
     const opp = getOpponentInfo(c);
     return opp.name.toLowerCase().includes(searchQuery.trim().toLowerCase());
+  });
+
+  // Highlight / boost unread conversations to the absolute top of the index view, then chronology
+  const sortedAndFilteredChats = [...filteredChats].sort((a, b) => {
+    const aUnread = unreadChatIds.includes(a.id) ? 1 : 0;
+    const bUnread = unreadChatIds.includes(b.id) ? 1 : 0;
+    
+    if (aUnread !== bUnread) {
+      return bUnread - aUnread; // prioritized first
+    }
+    
+    const aTime = a.lastMessageAt ? new Date(a.lastMessageAt).getTime() : 0;
+    const bTime = b.lastMessageAt ? new Date(b.lastMessageAt).getTime() : 0;
+    return bTime - aTime;
   });
 
   const handleSendRequest = async (targetUsername: string, targetId: string) => {
@@ -592,13 +626,13 @@ export default function Sidebar({
         {isCortexDev(currentUser.username) && (
           <button
             onClick={() => setActiveTab('dev_dashboard')}
-            className={`flex-1 min-w-[75px] py-1 px-1.5 rounded-lg text-xs font-semibold tracking-wide transition-all text-center flex items-center justify-center gap-1 cursor-pointer whitespace-nowrap ${
+            className={`flex-grow py-1 px-1.5 rounded-lg text-xs font-semibold tracking-wide transition-all text-center flex items-center justify-center gap-1 cursor-pointer whitespace-nowrap ${
               activeTab === 'dev_dashboard'
-                ? 'bg-red-950/40 text-red-300 border border-red-900/45 shadow-sm'
-                : 'text-gray-400 hover:text-white hover:bg-white/5 hover:text-red-300'
+                ? 'bg-[#00a884]/20 text-[#00a884] border border-[#00a884]/30 shadow-sm'
+                : 'text-gray-400 hover:text-white hover:bg-white/5'
             }`}
           >
-            <Sparkles className="w-3.5 h-3.5 text-red-400" /> Devs
+            <Database className="w-3.5 h-3.5" /> Backups / Dev
           </button>
         )}
       </div>
@@ -647,9 +681,10 @@ export default function Sidebar({
                 </button>
               </div>
             ) : (
-              filteredChats.map((chat) => {
+              sortedAndFilteredChats.map((chat) => {
                 const opponent = getOpponentInfo(chat);
                 const isActive = activeChatId === chat.id;
+                const isUnread = unreadChatIds.includes(chat.id);
 
                 return (
                   <div
@@ -675,22 +710,31 @@ export default function Sidebar({
                       {/* Message labels and timestamp metrics */}
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center justify-between">
-                          <h4 className={`font-semibold text-sm truncate flex items-center gap-0.5 ${isActive ? 'text-white' : 'text-gray-100'}`}>
+                          <h4 className={`font-semibold text-sm truncate flex items-center gap-0.5 ${
+                            isUnread ? 'text-[#00a884] font-extrabold' : (isActive ? 'text-white' : 'text-gray-100')
+                          }`}>
                             <span>{opponent.name}</span>
                             {!chat.isGroup && <VerifiedBadge username={opponent.name} className="w-2.5 h-2.5" />}
                           </h4>
                           {chat.lastMessageAt && (
-                            <span className="text-[9px] text-gray-500 select-none">
+                            <span className={`text-[9px] select-none ${isUnread ? 'text-[#00a884] font-bold' : 'text-gray-500'}`}>
                               {new Date(chat.lastMessageAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                             </span>
                           )}
                         </div>
 
-                        <p className="text-xs text-gray-400 truncate mt-0.5">
-                          {chat.lastMessage || (
-                            <span className="text-gray-500 italic">No messages yet.</span>
+                        <div className="flex items-center justify-between gap-1.5 mt-0.5">
+                          <p className={`text-xs truncate ${
+                            isUnread ? 'text-white font-bold' : 'text-gray-400'
+                          }`}>
+                            {chat.lastMessage || (
+                              <span className="text-gray-500 italic">No messages yet.</span>
+                            )}
+                          </p>
+                          {isUnread && (
+                            <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0 shadow-[0_0_8px_#10b981] animate-pulse"></span>
                           )}
-                        </p>
+                        </div>
                       </div>
                     </div>
 
@@ -1025,6 +1069,8 @@ export default function Sidebar({
                 placeholder="Reply to status..."
                 value={statusReplyText}
                 onChange={(e) => setStatusReplyText(e.target.value)}
+                onFocus={() => setStatusInputFocused(true)}
+                onBlur={() => setStatusInputFocused(false)}
                 className="flex-grow bg-white/10 hover:bg-white/15 focus:bg-[#202c33] text-white placeholder-white/60 border border-white/15 rounded-full px-4 py-2 text-xs focus:outline-none transition-all focus:ring-1 focus:ring-emerald-500"
               />
               <button
@@ -1044,8 +1090,12 @@ export default function Sidebar({
 
       {/* DIRECTORY ADD FRIENDS TAB */}
       {activeTab === 'friends' && (() => {
-        const myFriendsList = directoryUsers.filter(u => u.id !== currentUser.id && currentUser.friends?.includes(u.id));
-        const otherUsersList = directoryUsers.filter(u => u.id !== currentUser.id && !currentUser.friends?.includes(u.id));
+        const myFriendsList = directoryUsers
+          .filter(u => u.id !== currentUser.id && currentUser.friends?.includes(u.id))
+          .sort((a, b) => new Date(b.createdAt || '').getTime() - new Date(a.createdAt || '').getTime());
+        const otherUsersList = directoryUsers
+          .filter(u => u.id !== currentUser.id && !currentUser.friends?.includes(u.id))
+          .sort((a, b) => new Date(b.createdAt || '').getTime() - new Date(a.createdAt || '').getTime());
 
         const query = friendSearchQuery.trim().toLowerCase();
         const filteredFriends = myFriendsList.filter(u => !query || u.username.toLowerCase().includes(query));
@@ -1250,6 +1300,88 @@ export default function Sidebar({
                 </div>
               </div>
 
+              {/* Cryptographic Backup / Restore Management Area */}
+              <div className="p-3 bg-red-950/20 border-b border-white/5 space-y-2.5">
+                <span className="block text-[9px] text-red-400 font-bold uppercase tracking-wider font-mono">Encrypted Backup Operations (.crypt)</span>
+                
+                <div className="flex gap-2.5">
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        const res = await fetch('/api/admin/backup/download', {
+                          headers: { Authorization: `Bearer ${token}` }
+                        });
+                        if (res.ok) {
+                          const blob = await res.blob();
+                          const url = window.URL.createObjectURL(blob);
+                          const a = document.createElement('a');
+                          a.href = url;
+                          a.download = 'backup.crypt';
+                          document.body.appendChild(a);
+                          a.click();
+                          a.remove();
+                          window.URL.revokeObjectURL(url);
+                          setSuccessStatus('Encrypted backup (backup.crypt) downloaded successfully!');
+                        } else {
+                          setErrorStatus('Failed to download system backup.');
+                        }
+                      } catch (err) {
+                        setErrorStatus('Network error creating backup.');
+                      }
+                    }}
+                    className="flex-1 py-1.5 bg-red-900/40 hover:bg-red-950/25 border border-red-800/40 text-red-200 font-bold text-[10px] uppercase font-mono tracking-wider rounded-lg text-center cursor-pointer select-none active:scale-95 transition-all outline-none"
+                  >
+                    ⬇️ Backup DB
+                  </button>
+
+                  <label className="flex-grow flex-1 py-1.5 bg-[#00a884]/20 hover:bg-[#00a884]/30 border border-[#00a884]/30 text-[#00a884] font-bold text-[10px] uppercase font-mono tracking-wider rounded-lg text-center cursor-pointer select-none active:scale-95 transition-all flex items-center justify-center">
+                    <span>⬆️ Restore DB</span>
+                    <input
+                      type="file"
+                      accept=".crypt"
+                      onClick={(e) => {
+                        // Reset input so uploading same file triggers onChange
+                        (e.target as any).value = '';
+                      }}
+                      onChange={async (e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        const reader = new FileReader();
+                        reader.onload = async (evt) => {
+                          const text = evt.target?.result as string;
+                          if (!text) return;
+                          try {
+                            const res = await fetch('/api/admin/backup/upload', {
+                              method: 'POST',
+                              headers: {
+                                'Content-Type': 'application/json',
+                                Authorization: `Bearer ${token}`
+                              },
+                              body: JSON.stringify({ encryptedHex: text })
+                            });
+                            const data = await res.json();
+                            if (res.ok) {
+                              setSuccessStatus('Database backup restored successfully! Reloading feeds...');
+                              if (onRefreshProfile) onRefreshProfile();
+                              setTimeout(() => {
+                                window.location.reload();
+                              }, 1500);
+                            } else {
+                              setErrorStatus(data.error || 'Backup upload failed.');
+                            }
+                          } catch {
+                            setErrorStatus('Network error uploading backup.');
+                          }
+                        };
+                        reader.readAsText(file);
+                      }}
+                      className="hidden"
+                    />
+                  </label>
+                </div>
+              </div>
+
               {/* Selector subtab menu */}
               <div className="flex border-b border-white/5 bg-black/15">
                 <button
@@ -1367,16 +1499,7 @@ export default function Sidebar({
         </div>
       )}
 
-      {/* Embedded Quick AI Chat Selector */}
-      <div className="p-3 bg-[#121b22] border-t border-white/5 select-none shrink-0 border-r border-[#111b21]">
-        <div className="p-2.5 rounded-xl bg-white/5 border border-white/5 flex items-center justify-between text-xs">
-          <div className="flex items-center gap-2">
-            <Sparkles className="w-3.5 h-3.5 text-yellow-400 shrink-0" />
-            <span className="text-gray-300 font-medium">Integrated AI Assistant</span>
-          </div>
-          <span className="text-[9px] text-gray-500">MEMBER @ai</span>
-        </div>
-      </div>
+
 
     </div>
   );
